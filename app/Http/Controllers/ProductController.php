@@ -174,7 +174,7 @@ class ProductController extends Controller
             if (count($variants) > 0) {
                 ProductVariant::insert($variants);
             }
-//            $product->images()->delete();
+            $product->images()->delete();
 
             $images = [];
             foreach ($request->product_image as $key => $image) {
