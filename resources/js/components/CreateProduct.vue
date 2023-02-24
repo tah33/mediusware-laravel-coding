@@ -24,7 +24,9 @@
                         <h6 class="m-0 font-weight-bold text-primary">Media</h6>
                     </div>
                     <div class="card-body border">
-                        <vue-dropzone ref="myVueDropzone" id="dropzone" :options="dropzoneOptions"></vue-dropzone>
+                        <vue-dropzone ref="myVueDropzone" id="dropzone" v-on:vdropzone-success="uploadSuccess"
+                                      v-on:vdropzone-removed-file="removeDropzoneFile"
+                                      :options="dropzoneOptions"></vue-dropzone>
                     </div>
                 </div>
             </div>
@@ -49,16 +51,19 @@
                             </div>
                             <div class="col-md-8">
                                 <div class="form-group">
-                                    <label v-if="product_variant.length != 1" @click="product_variant.splice(index,1); checkVariant"
+                                    <label v-if="product_variant.length != 1"
+                                           @click="product_variant.splice(index,1); checkVariant"
                                            class="float-right text-primary"
                                            style="cursor: pointer;">Remove</label>
                                     <label v-else for="">.</label>
-                                    <input-tag v-model="item.tags" @input="checkVariant" class="form-control"></input-tag>
+                                    <input-tag v-model="item.tags" @input="checkVariant"
+                                               class="form-control"></input-tag>
                                 </div>
                             </div>
                         </div>
                     </div>
-                    <div class="card-footer" v-if="product_variant.length < variants.length && product_variant.length < 3">
+                    <div class="card-footer"
+                         v-if="product_variant.length < variants.length && product_variant.length < 3">
                         <button @click="newVariant" class="btn btn-primary">Add another option</button>
                     </div>
 
@@ -91,7 +96,8 @@
             </div>
         </div>
 
-        <button @click="saveProduct" type="submit" class="btn btn-lg btn-primary">Save</button>
+        <button v-if="product == null" @click="saveProduct" type="submit" class="btn btn-lg btn-primary">Save</button>
+        <button v-else @click="updateProduct" type="submit" class="btn btn-lg btn-primary">update</button>
         <button type="button" class="btn btn-secondary btn-lg">Cancel</button>
     </section>
 </template>
@@ -110,7 +116,23 @@ export default {
         variants: {
             type: Array,
             required: true
-        }
+        },
+        product: {
+            type: Object,
+            required: false
+        },
+        product_variants: {
+            type: Array,
+            required: false
+        },
+        variant_prices: {
+            type: Array,
+            required: false
+        },
+        product_images: {
+            type: Array,
+            required: false
+        },
     },
     data() {
         return {
@@ -126,10 +148,11 @@ export default {
             ],
             product_variant_prices: [],
             dropzoneOptions: {
-                url: 'https://httpbin.org/post',
+                url: '/product/images',
                 thumbnailWidth: 150,
                 maxFilesize: 0.5,
-                headers: {"My-Awesome-Header": "header value"}
+                addRemoveLinks: true,
+                headers: {"X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]').getAttribute('content')},
             }
         }
     },
@@ -140,30 +163,37 @@ export default {
             let selected_variants = this.product_variant.map(el => el.option);
             let available_variants = all_variants.filter(entry1 => !selected_variants.some(entry2 => entry1 == entry2))
             // console.log(available_variants)
-
             this.product_variant.push({
                 option: available_variants[0],
                 tags: []
             })
         },
-
         // check the variant and render all the combination
         checkVariant() {
             let tags = [];
-            this.product_variant_prices = [];
+            if (this.product == null) {
+                this.product_variant_prices = [];
+            }
             this.product_variant.filter((item) => {
                 tags.push(item.tags);
-            })
-
+            });
+            let product_tags = [];
+            if (this.product != null) {
+                for (let i = 0; i < this.product_variant_prices.length; i++) {
+                    let product_tag = this.product_variant_prices[i];
+                    product_tags.push(product_tag.title);
+                }
+            }
             this.getCombn(tags).forEach(item => {
-                this.product_variant_prices.push({
-                    title: item,
-                    price: 0,
-                    stock: 0
-                })
-            })
+                if (!product_tags.includes(item)) {
+                    this.product_variant_prices.push({
+                        title: item,
+                        price: 0,
+                        stock: 0
+                    });
+                }
+            });
         },
-
         // combination algorithm
         getCombn(arr, pre) {
             pre = pre || '';
@@ -176,7 +206,6 @@ export default {
             }, []);
             return ans;
         },
-
         // store product into database
         saveProduct() {
             let product = {
@@ -187,21 +216,105 @@ export default {
                 product_variant: this.product_variant,
                 product_variant_prices: this.product_variant_prices
             }
-
-
+            console.log(this.images);
             axios.post('/product', product).then(response => {
-                console.log(response.data);
+                alert('Product Created');
+                this.resetForm();
             }).catch(error => {
                 console.log(error);
             })
-
             console.log(product);
+        },
+        updateProduct() {
+            let product = {
+                title: this.product_name,
+                sku: this.product_sku,
+                description: this.description,
+                product_image: this.images,
+                product_variant: this.product_variant,
+                product_variant_prices: this.product_variant_prices
+            }
+            axios.put('/product/' + this.product.id, product).then(response => {
+                alert('Product Updated');
+            }).catch(error => {
+                console.log(error);
+            })
+        },
+        uploadSuccess: function (file, response) {
+            this.images.push(response);
+        },
+        edit() {
+            if (this.product != null) {
+                let variant = [], tag = [];
+                for (let i = 0; i < this.product_variants.length; i++) {
+                    let product_variant = this.product_variants[i];
+                    for (let j = 0; j < product_variant.variant.product_variants.length; j++) {
+                        let product_variants = product_variant.variant.product_variants[j];
+                        tag.push(product_variants.variant);
+                    }
+                    variant.push({
+                        option: product_variant.variant_id,
+                        tags: tag
+                    });
+                    tag = [];
+                }
+                let prices = [];
+                for (let i = 0; i < this.variant_prices.length; i++) {
+                    let price = this.variant_prices[i];
+                    let title = (price.variant_one != null ? price.variant_one.variant + '/' : '') + (price.variant_two != null ? price.variant_two.variant + '/' : '') + (price.variant_three != null ? price.variant_three.variant + '/' : '');
+                    prices.push({
+                        title: title,
+                        price: price.price,
+                        stock: price.stock,
+                    });
+                }
+                let product = this.product;
+                this.product_name = product.title;
+                this.product_sku = product.sku;
+                this.description = product.description;
+                this.product_variant = variant;
+                this.product_variant_prices = prices;
+                this.addDropzoneImages();
+            }
+        },
+        addDropzoneImages() {
+            for (let i = 0; i < this.product_images.length; i++) {
+                let image = this.product_images[i];
+                let file_path = image.file_path.split('/');
+                var file = {size: 123, name: file_path[file_path.length - 1], type: "image/png"};
+                var url = '/' + image.file_path;
+                this.$refs.myVueDropzone.manuallyAddFile(file, url);
+                this.images.push(image.file_path);
+            }
+        },
+        removeDropzoneFile(file, error, xhr) {
+            let params = {
+                file: file.name,
+                product_id: this.product.id
+            }
+            axios.get('/product/delete-images',{params : params}).then(response => {
+                let image_to_remove = 'uploads/products/' + file.name;
+                for (let i = 0; i < this.images.length; i++) {
+                    if (this.images[i] == image_to_remove) {
+                        this.images.splice(i, 1);
+                    }
+                }
+            }).catch(error => {
+                console.log(error);
+            });
+        },
+        resetForm() {
+            this.product_name = '';
+            this.product_sku = '';
+            this.description = '';
+            this.images = [];
+            this.product_variant = [];
+            this.product_variant_prices = [];
+            this.$refs.myVueDropzone.removeAllFiles();
         }
-
-
     },
     mounted() {
-        console.log('Component mounted.')
+        this.edit();
     }
 }
 </script>

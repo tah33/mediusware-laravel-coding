@@ -23,7 +23,9 @@ Route::get('/home', 'HomeController@index')->name('home');
 
 Route::middleware('auth')->group(function () {
     Route::resource('product-variant', 'VariantController');
-    Route::resource('product', 'ProductController');
+    Route::resource('product', 'ProductController')->except(['show']);
     Route::resource('blog', 'BlogController');
     Route::resource('blog-category', 'BlogCategoryController');
 });
+Route::post('product/images',[\App\Http\Controllers\ProductController::class,'images'])->name('product.images');
+Route::get('product/delete-images',[\App\Http\Controllers\ProductController::class,'unlinkImage'])->name('product.delete.images');

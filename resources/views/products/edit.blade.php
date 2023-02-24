@@ -5,6 +5,7 @@
         <h1 class="h3 mb-0 text-gray-800">Edit Product</h1>
     </div>
     <div id="app">
-        <create-product :variants="{{ $variants }}">Loading</create-product>
+        <create-product :product="{{ json_encode($product) }}" :variants="{{ json_encode($variants) }}" :variant_prices="{{ json_encode($product->variant_price) }}"
+                        :product_variants="{{ json_encode($product->total_variants) }}" :product_images="{{ json_encode($product->images) }}">Loading</create-product>
     </div>
 @endsection
